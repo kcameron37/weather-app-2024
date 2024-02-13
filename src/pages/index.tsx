@@ -1,50 +1,148 @@
-import { useState, useEffect } from "react";
-import axios from "axios";
-import Views from "@/components/Views";
-import Forecast from '@/components/Forecast';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
-export default function Home() {
+interface IWeather {
+  temp: number;
+  feels_like: number;
+  main: string;
+  wind: string;
+}
+
+interface IForecast {
+  dt: number;
+  main: {
+    temp: number;
+  };
+  weather: {
+    main: string;
+  }[];
+  wind: {
+    speed: number;
+  };
+}
+
+const Home: React.FC = () => {
+  const [search, setSearch] = useState<string>('');
+  const [currentData, setCurrentData] = useState<IWeather | null>(null);
+  const [forecastData, setForecastData] = useState<IForecast[] | null>(null);
+
   const apiKey = "99873c3b1d75c5ae62ea9b0aac9dee01";
-  const [city, setCity] = useState("Vancouver");
-  const [newCity, setNewCity] = useState("");
-  const [data, setData] = useState<IWeather[]>([]);
 
-  const fetchData = async (city) => {
+  const fetchWeatherData = async () => {
     try {
-      const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${apiKey}`;
-      const response = await axios.get(url);
-      setData(Array.isArray(response.data) ? response.data : [response.data]);
+      const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${search}&appid=${apiKey}`;
+      const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${search}&appid=${apiKey}`;
+
+      const [weatherResponse, forecastResponse] = await Promise.all([
+        axios.get<IWeather>(weatherUrl),
+        axios.get<{ list: IForecast[] }>(forecastUrl)
+      ]);
+
+      setCurrentData(weatherResponse.data);
+
+      const filteredForecastData = filterForecastData(forecastResponse.data.list);
+      setForecastData(filteredForecastData);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error('Error fetching data:', error);
     }
   };
 
   useEffect(() => {
-    fetchData(city);
-  }, [city]);
+    if (search) {
+      fetchWeatherData();
+    }
+  }, [search]);
 
-  const handleSearch = () => {
-    setCity(newCity);
+  const roundUp = (number: number) => parseFloat(number.toFixed(1));
+
+  const toCelsius = (kelvin: number) => kelvin - 273.15;
+
+  const formatDateToDayOfWeek = (timestamp: number) => {
+    const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const date = new Date(timestamp * 1000);
+    const dayOfWeek = daysOfWeek[date.getDay()];
+    return dayOfWeek;
+  };
+
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleDateString();
+  };
+
+  const getWeatherIcon = (weather: string) => {
+    switch (weather) {
+      case 'Clear':
+        return '/sun.png';
+      case 'Clouds':
+        return '/cloud.png';
+      case 'Rain':
+        return '/rain.png';
+      case 'Snow':
+        return '/snow.png';
+      default:
+        return '/cloud.png';
+    }
+  };
+
+  const filterForecastData = (forecastList: IForecast[]) => {
+    const filteredForecastData: IForecast[] = [];
+    const datesAdded = new Set<number>();
+
+    forecastList.forEach((forecast) => {
+      const date = new Date(forecast.dt * 1000).getDate();
+      if (!datesAdded.has(date)) {
+        filteredForecastData.push(forecast);
+        datesAdded.add(date);
+      }
+    });
+
+    return filteredForecastData;
   };
 
   return (
-    <main className={`flex min-h-screen flex-col items-center justify-between p-24`}>   
+    <div className="container">
+      <h1>Welcome to Kaitlyn's Weather App!</h1>
       <div>
-        <input 
-          type="text" 
-          placeholder="Enter city..." 
-          value={newCity} 
-          onChange={(e) => setNewCity(e.target.value)} 
+        <input
+          className="searchTerm" 
+          type="text"
+          placeholder="Enter Location"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <button onClick={handleSearch}>Search</button>
-      </div>
-      
-      {data.map((d, index) => (
-        <div key={index}>
-          {city}
-          <Views temp={d.main.temp} feels_like={d.main.feels_like} main={d.weather[0].main} />
+        <button className="button" onClick={fetchWeatherData}>Search</button>
+      </div> 
+
+      {currentData && (
+        <div className="current">
+          <h1>Current Weather</h1>
+          <div className="currentBox">
+            <div className="currentBoxImage">
+            <img   src={getWeatherIcon(currentData.main)}   alt={currentData.main}  className="mainIcon" />
+            </div>
+            <p>Temperature: {roundUp(toCelsius(currentData.temp))}°C</p>
+            <p>Feels Like: {roundUp(toCelsius(currentData.feels_like))}°C</p>
+          </div>
         </div>
-      ))}
-    </main>
+      )}
+
+      <h1>5 Day Forecast</h1>
+
+      {forecastData && (
+        <div className="forecast">
+          {forecastData.map((forecast, index) => (
+            <div className="forecastBox" key={index}>
+              <img src={getWeatherIcon(forecast.weather[0].main)} alt={forecast.weather[0].main} />
+              <h3>{roundUp(toCelsius(forecast.main.temp))}°C</h3>
+              <p>{formatDateToDayOfWeek(forecast.dt)}</p>
+              <p>{forecast.weather[0].main}</p>
+              <p>Wind: {forecast.wind.speed} m/s</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
-}
+};
+
+export default Home;
