@@ -1,37 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-interface IWeather {
-  temp: number;
-  feels_like: number;
-  main: string;
-  wind: string;
-}
-
-interface IForecast {
-  dt: number;
-  main: {
-    temp: number;
-  };
-  weather: {
-    main: string;
-  }[];
-  wind: {
-    speed: number;
-  };
-}
-
 const Home: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [currentData, setCurrentData] = useState<IWeather | null>(null);
   const [forecastData, setForecastData] = useState<IForecast[] | null>(null);
 
+  interface IWeather {
+    main: {
+      temp: number;
+      feels_like: number;
+    };
+    weather: {
+      main: string;
+    }[];
+  }
+
+  interface IForecast {
+    dt: number;
+    main: {
+      temp: number;
+    };
+    weather: {
+      main: string;
+    }[];
+    wind: {
+      speed: number;
+    };
+  }
+
   const apiKey = "99873c3b1d75c5ae62ea9b0aac9dee01";
+
 
   const fetchWeatherData = async () => {
     try {
-      const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${search}&appid=${apiKey}`;
-      const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${search}&appid=${apiKey}`;
+      const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${search}&units=metric&appid=${apiKey}`;
+      const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${search}&units=metric&appid=${apiKey}`;
 
       const [weatherResponse, forecastResponse] = await Promise.all([
         axios.get<IWeather>(weatherUrl),
@@ -39,19 +43,17 @@ const Home: React.FC = () => {
       ]);
 
       setCurrentData(weatherResponse.data);
-
-      const filteredForecastData = filterForecastData(forecastResponse.data.list);
-      setForecastData(filteredForecastData);
+      setForecastData(forecastResponse.data.list);
     } catch (error) {
       console.error('Error fetching data:', error);
     }
   };
 
-  useEffect(() => {
+  const handleSearch = () => {
     if (search) {
       fetchWeatherData();
     }
-  }, [search]);
+  };
 
   const roundUp = (number: number) => parseFloat(number.toFixed(1));
 
@@ -62,11 +64,6 @@ const Home: React.FC = () => {
     const date = new Date(timestamp * 1000);
     const dayOfWeek = daysOfWeek[date.getDay()];
     return dayOfWeek;
-  };
-
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp * 1000);
-    return date.toLocaleDateString();
   };
 
   const getWeatherIcon = (weather: string) => {
@@ -84,19 +81,12 @@ const Home: React.FC = () => {
     }
   };
 
-  const filterForecastData = (forecastList: IForecast[]) => {
-    const filteredForecastData: IForecast[] = [];
-    const datesAdded = new Set<number>();
-
-    forecastList.forEach((forecast) => {
-      const date = new Date(forecast.dt * 1000).getDate();
-      if (!datesAdded.has(date)) {
-        filteredForecastData.push(forecast);
-        datesAdded.add(date);
-      }
+  const filterAfternoonForecasts = (forecasts: IForecast[]) => {
+    return forecasts.filter(forecast => {
+      const date = new Date(forecast.dt * 1000);
+      const hours = date.getHours();
+      return hours >= 12 && hours <= 15;
     });
-
-    return filteredForecastData;
   };
 
   return (
@@ -110,7 +100,7 @@ const Home: React.FC = () => {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <button className="button" onClick={fetchWeatherData}>Search</button>
+        <button className="button" onClick={handleSearch}>Search</button>
       </div> 
 
       {currentData && (
@@ -118,10 +108,10 @@ const Home: React.FC = () => {
           <h1>Current Weather</h1>
           <div className="currentBox">
             <div className="currentBoxImage">
-            <img   src={getWeatherIcon(currentData.main)}   alt={currentData.main}  className="mainIcon" />
+              <img src={getWeatherIcon(currentData.weather[0].main)} alt={currentData.weather[0].main} className="mainIcon" />
             </div>
-            <p>Temperature: {roundUp(toCelsius(currentData.temp))}°C</p>
-            <p>Feels Like: {roundUp(toCelsius(currentData.feels_like))}°C</p>
+            <h3>{roundUp(currentData.main.temp)}°C</h3>
+            <p>Feels Like: {roundUp(currentData.main.feels_like)}°C</p>
           </div>
         </div>
       )}
@@ -130,10 +120,10 @@ const Home: React.FC = () => {
 
       {forecastData && (
         <div className="forecast">
-          {forecastData.map((forecast, index) => (
+          {filterAfternoonForecasts(forecastData).map((forecast, index) => (
             <div className="forecastBox" key={index}>
               <img src={getWeatherIcon(forecast.weather[0].main)} alt={forecast.weather[0].main} />
-              <h3>{roundUp(toCelsius(forecast.main.temp))}°C</h3>
+              <h3>{roundUp(forecast.main.temp)}°C</h3>
               <p>{formatDateToDayOfWeek(forecast.dt)}</p>
               <p>{forecast.weather[0].main}</p>
               <p>Wind: {forecast.wind.speed} m/s</p>
